@@ -1,0 +1,73 @@
+import os
+import json
+from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel
+import uvicorn
+from dotenv import load_dotenv
+
+# Import the original request handler from the server
+from .server import handle_request
+
+# Load environment variables from a .env file for local testing
+load_dotenv()
+
+# --- Configuration & Security ---
+API_KEY = os.getenv("API_KEY")
+if not API_KEY:
+    raise ValueError("API_KEY environment variable not set. Please set a secret key.")
+
+auth_scheme = HTTPBearer()
+
+def verify_api_key(creds: HTTPAuthorizationCredentials = Depends(auth_scheme)):
+    """Dependency to verify the API key."""
+    if not creds or creds.credentials != API_KEY:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing API key",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return creds.credentials
+
+# --- Pydantic Models for Request Body ---
+class McpRequest(BaseModel):
+    mcp_request: dict
+
+# --- FastAPI Application ---
+app = FastAPI(
+    title="MySQL MCP Web Server",
+    description="A secure web API to interact with a MySQL database via MCP-like requests.",
+    version="1.0.0"
+)
+
+@app.post("/query", dependencies=[Depends(verify_api_key)])
+async def process_query(request: McpRequest):
+    """
+    Receives an MCP-formatted request, processes it, and returns the result.
+    """
+    try:
+        # Convert the incoming Pydantic model to a JSON string for the handler
+        request_str = json.dumps(request.mcp_request)
+        
+        # Use the original handle_request function
+        response_str = handle_request(request_str)
+        
+        # The handler returns a JSON string, so we parse it back to an object
+        response_json = json.loads(response_str)
+        
+        return response_json
+        
+    except Exception as e:
+        # If anything goes wrong, return a structured error
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/health")
+def health_check():
+    """A simple health check endpoint."""
+    return {"status": "ok"}
+
+# --- Run the server (for local testing) ---
+if __name__ == "__main__":
+    # Get port from environment or default to 8000 for local dev
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
