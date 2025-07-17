@@ -17,4 +17,5 @@ COPY ./src /app/src
 # Uvicorn will run the FastAPI app.
 # The host 0.0.0.0 is crucial for the container to be accessible from the outside.
 # Render will automatically set the $PORT environment variable.
-CMD ["uvicorn", "src.mysql_mcp_server.main:app", "--host", "0.0.0.0", "--port", "$PORT"]
+# CMD ["uvicorn", "src.mysql_mcp_server.main:app", "--host", "0.0.0.0", "--port", "$PORT"]
+CMD uvicorn src.mysql_mcp_server.main:app --host 0.0.0.0 --port $PORT
